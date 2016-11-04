@@ -1,0 +1,2 @@
+DBC_DBG_FILE: Using libdbcapi.log
+CTDBC_DBG: ERROR: Cannot raise error, context is NULL
