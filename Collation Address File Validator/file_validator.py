@@ -62,10 +62,17 @@ class Collation_Address(object) :
 
     def is_Sample(self) :
         is_Sample = False
-        if 'QC' in self.add_ln_2 or 'Samples' in self.add_ln_1 or self.tray_serial_num == '00000000' :
+        if 'QC' in self.add_ln_2 or 'Samples' in self.add_ln_1 or self.tray_serial_num == '00000000' or '000000000000' in self.imb_code :
             is_Sample = True
 
         return is_Sample
+
+    def is_Selective(self) :
+        is_Selective = False
+        if self.finished_dt_tm not in '              ' :
+            is_Selective = True
+
+        return is_Selective
 
     def tray_Dict(self) :
         return {self.get_Job_NTA():self.get_Tray_SN()}
@@ -153,19 +160,6 @@ class Client_Address(object) :
     def __str__(self) :
         return "{0}	{1}	{2}{3}	{4}".format(self.address, self.zip4, self.jobid, self.nta, self.feeder_code)
 
-class Interfaced_Client_Address(Client_Address) :
-    #This is an extension of Client_Address which is populated with data from the DB
-
-    def __init__(self, job_id, nta, zip4, address, feeder_code, franchise, batch_id) :
-        self.job_id = job_id
-        self.batch_id = batch_id
-
-    def get_Job_Id(self) :
-        return self.job_id
-
-    def get_Batch_ID(self) :
-        return self.batch_id
-
 
 def get_Collation_Address_Files() :
     returned_List = []
@@ -180,7 +174,6 @@ def get_Collation_Address_Files() :
     return returned_List
 
 def get_Client_File() :
-    # This will simply return the first file it finds. The logic is not built to handle more than one client file at a time for this test.
     returned_List = []
     list_Files = os.listdir('client files')
         
@@ -261,10 +254,10 @@ def split_By_JobNTA(client_objects, client_file_list) :
                 summary_Report.append(report_str)
             gttl_Summary = "Grand total of addresses: {0}, estimate of addresses that will be assigned to default feeder: {1}".format(gttl, 10000-gttl)
             summary_Report.append(gttl_Summary)
-            file_name = "{0}_ClientFile".format(file_name_start)
+            file_name = "{0}_{1}".format(file_name_start, jobnta)
             out_To_File(file_name, tmp, subpath="\\Program Generated Client Files - {0}".format(file_name_start))
             x = get_Status(100.0, len(job_NTA_List), x)
-            verify_Query.append('select * from selectiveinsert where job_id = {0} and nta = "{1}"'.format(jobnta[0:6], jobnta[6:]))
+            verify_Query.append('select * from selectiveinsert2 where job_id = {0} and nta = "{1}"'.format(jobnta[0:6], jobnta[6:]))
 
         out_To_File("Client_File_{0}_JobNTA_Summary".format(file_name_start), summary_Report)
         out_To_File("Verify_Query_{0}".format(file_name_start), verify_Query)
@@ -276,7 +269,7 @@ def generate_Clean_Client_File(client_objects, client_file_list) :
     output = []
     for clfile in client_objects :
         for item in clfile :
-            output.append(str(item))
+            output.append(str(item).rstrip("\n").rstrip("\r"))
             x = get_Status(100.0, len(clfile), x)
         file_name_start = client_file_list[i].rstrip(".TXT").rstrip(".txt").replace("client files\\", "")
         file_name = "{0}_ClientFile".format(file_name_start)
@@ -408,12 +401,108 @@ def report_Counts(collation_Objects) :
                 feeder_Report = ""
                 if len(feeder) > 2 :  
                     feeder_Report = feeder_Decode_Internal(feeder, basic = True)
-                report_String = "{0}, {1}, {2}, {3}".format(jobnta, feeder, ttl_WO_Samples, ttl_Sampls)
+                all_Volume = ttl_WO_Samples + ttl_Sampls
+                report_String = "{0}, {1}, {2}, {3}, {4}".format(jobnta, feeder, ttl_WO_Samples, ttl_Sampls, all_Volume)
                 output.append(report_String)
                 output.append(feeder_Report)
 
         i = get_Status(100.0, len(collation_Objects), i)
     out_To_File("FeederCounts", output)
+
+def test(collation_Objects) :
+
+    is_sel = []
+    is_not = []
+    nomatch = []
+    print("Please wait. This could take some time when there are many collation address files. Processing...")
+    for collationfile in collation_Objects :
+        unique_Feeder_List = []
+        job_NTA_List = []
+        for address in collationfile :
+            if address.is_Selective() == True :
+                is_sel.append(address)
+            elif address.is_Selective() == False :
+                is_not.append(address)
+            else :
+                nomatch.append(address)
+
+    print(len(is_sel))
+    print(len(is_not))
+    print(len(nomatch))
+
+
+
+def report_Counts_For_Data_Repair(collation_Objects) :
+
+    output = []
+    i = 1
+    print("Please wait. This could take some time when there are many collation address files. Processing...")
+    for collationfile in collation_Objects :
+        unique_Feeder_List = []
+        job_NTA_List = []
+        for address in collationfile :
+            if '              ' not in address.get_Feeder_Code() :
+                
+                if address.get_Feeder_Code() not in unique_Feeder_List :
+                    unique_Feeder_List.append(address.get_Feeder_Code())
+                if address.get_Job_NTA() not in job_NTA_List :
+                    job_NTA_List.append(address.get_Job_NTA())
+
+    
+        for jobnta in job_NTA_List :
+            offer = 0
+            for feeder in unique_Feeder_List :
+                ttl_WO_Samples = sum(a.get_Feeder_Code() == feeder and a.get_Job_NTA() == jobnta and a.is_Sample() == False for c in collation_Objects for a in c)
+                ttl_Sampls = sum(a.get_Feeder_Code() == feeder and a.get_Job_NTA() == jobnta for c in collation_Objects for a in c) - ttl_WO_Samples
+                all_Volume = ttl_WO_Samples + ttl_Sampls
+                off_code_1 = "200S"
+                off_code_2 = "300PP"
+                off_code_3 = "500C"
+                offer += 1
+                if offer == 1 :
+                    use_offer = off_code_1
+                elif offer == 2 :
+                    use_offer = off_code_2
+                elif offer == 3 :
+                    use_offer = off_code_3
+                report_String = "update selectiveinsertvolume2 set all_volume = {0} where job_id = {1} and nta = '{2}' and offer_code = '{3}'".format(all_Volume, jobnta[0:6], jobnta[6:], use_offer)
+                output.append(report_String)
+
+        i = get_Status(100.0, len(collation_Objects), i)
+    out_To_File("DataRepair", output)
+
+def report_Counts_For_VMC_RPT(collation_Objects) :
+
+    output = []
+    output.append("NTAID	BATCH ID	ORDERGROUP	FEEDERID	OFFERCODE	ALL VOL	MAILED VOL")
+    i = 1
+    print("Please wait. This could take some time when there are many collation address files. Processing...")
+    for collationfile in collation_Objects :
+        unique_Feeder_List = []
+        job_NTA_List = []
+        for address in collationfile :
+            if address.get_Feeder_Code() not in unique_Feeder_List :
+                unique_Feeder_List.append(address.get_Feeder_Code())
+            if address.get_Job_NTA() not in job_NTA_List :
+                job_NTA_List.append(address.get_Job_NTA())
+
+    
+        for jobnta in job_NTA_List :
+            gttl_all = 0
+            gttl_mailed = 0
+            for feeder in unique_Feeder_List :
+                ttl_WO_Samples = sum(a.get_Feeder_Code() == feeder and a.get_Job_NTA() == jobnta and a.is_Sample() == False for c in collation_Objects for a in c)
+                ttl_Sampls = sum(a.get_Feeder_Code() == feeder and a.get_Job_NTA() == jobnta for c in collation_Objects for a in c) - ttl_WO_Samples
+                all_Volume = ttl_WO_Samples + ttl_Sampls
+                report_String = "{0}				{1}	{2}	{3}".format(jobnta, feeder, all_Volume, ttl_WO_Samples)
+                output.append(report_String)
+                gttl_all+=all_Volume
+                gttl_mailed+=ttl_WO_Samples
+            output.append("					{0}	{1}".format(gttl_all, gttl_mailed))
+                
+
+        i = get_Status(100.0, len(collation_Objects), i)
+    out_To_File("VolumeReport", output, ".xls")
 
 
 def create_Collation_Address_File_Objects(collation_Add_File_List) :
@@ -587,11 +676,14 @@ def compare_Client_Files_To_Collation_Files(client_objects, collation_objects) :
             if collation.is_Sample() == False :
                 collation_List.append(collation.simple_Compare())
 
-    s = set(collation_List)
-    diff = [x for x in client_List if x not in s]
+    s = set(client_List)
+    c = set(collation_List)
+    diff = [x for x in s if x not in c]
+    out_To_File("MISSINGFROMCLIENT", diff, subpath="\\Missing Addresses in Collation Files - Detail Reports")
+    
 
     for x in diff :
-        new = x.split(", ")
+        new = x.split(",")
         if new[0] not in job_NTA_List :
             job_NTA_List.append(new[0])
 
@@ -599,11 +691,12 @@ def compare_Client_Files_To_Collation_Files(client_objects, collation_objects) :
         i = 0
         tmp = []
         for x in diff :
-            new = x.split(", ")
+            new = x.split(",")
             if jobnta == new[0] :
                 i += 1
                 tmp.append(x)
         out_To_File(jobnta + "_MISSINGFROMCOLLATION", tmp, subpath="\\Missing Addresses in Collation Files - Detail Reports")
+        out_To_File(jobnta + "_MISSINGFROMCLIENT", diff)
         report_Str = "JOBNTA: {0}, MISSING COUNT: {1}".format(jobnta, i)
         
         master_Report.append(report_Str)
@@ -794,6 +887,18 @@ def main() :
     if mode == "12" :
         client_objects = create_Collation_Address_File_Objects_For_Client_File_Creation(files)
         create_Mock_Client_File_From_Collation_Addr_File(client_objects)
+    if mode == "data repair" :
+        objects_List = create_Collation_Address_File_Objects(files)
+        report_Counts_For_Data_Repair(objects_List)
+        raw_input("PROCESSING COMPLETE. PRESS ANY KEY TO PROCEED.")
+    if mode == "vmc rpt" :
+        objects_List = create_Collation_Address_File_Objects(files)
+        report_Counts_For_VMC_RPT(objects_List)
+        raw_input("PROCESSING COMPLETE. PRESS ANY KEY TO PROCEED.")
+    if mode == "test" :
+        objects_List = create_Collation_Address_File_Objects(files)
+        test(objects_List)
+        raw_input("PROCESSING COMPLETE. PRESS ANY KEY TO PROCEED.")
 
 def main_Debug() :
     
