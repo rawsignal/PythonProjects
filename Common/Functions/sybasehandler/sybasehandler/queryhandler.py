@@ -12,7 +12,8 @@ class QueryHandler(object) :
         results = []
 
         for row in quer.fetchall() :
-            results.append(row)
+            for element in row :
+                results.append(element)
 
         if not results :
             results.append("No results returned.")

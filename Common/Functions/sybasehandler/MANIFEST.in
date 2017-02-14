@@ -1,0 +1,2 @@
+include libdbcapi.log
+include sybpydb.pyd

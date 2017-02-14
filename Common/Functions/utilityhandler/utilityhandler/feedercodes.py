@@ -1,7 +1,8 @@
 import os
 import sys
+from collections import OrderedDict
 
-def feeder_Simulator(off_Feeders) :
+def feeder_simulator(off_Feeders) :
     off_Feeder_List = off_Feeders.replace(" ", "").split(",")
 
     group1 = OrderedDict([("SIG4", 1), ("SIG3", 1), ("SIG2", 1), ("SIG1", 1)])
@@ -34,7 +35,7 @@ def feeder_Simulator(off_Feeders) :
 
     print(feeder)
 
-def feeder_Decode_Internal(feeder_Code, basic = False) :
+def feeder_decode_internal(feeder_Code, basic = False) :
     group1 = OrderedDict([("SIG4", 1), ("SIG3", 1), ("SIG2", 1), ("SIG1", 1)])
     group2 = OrderedDict([("4", 1), ("3", 1), ("2", 1), ("1", 1)])
     group3 = OrderedDict([("8", 1), ("7", 1), ("6", 1), ("5", 1)])

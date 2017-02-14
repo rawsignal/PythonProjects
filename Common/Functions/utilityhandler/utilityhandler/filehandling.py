@@ -1,8 +1,7 @@
 import os
 import sys
-import datetime
 
-def fetch_Files(prepath, exclude=[]) :
+def fetch_files(prepath=os.getcwd(), exclude=[]) :
     returned_List = []
     list_Files = os.listdir(prepath)
 
@@ -10,8 +9,10 @@ def fetch_Files(prepath, exclude=[]) :
         if files in exclude :
             os.remove(os.path.join(prepath, files))
         else :
-            returned_List.append(os.path.join(preapth, files))
+            returned_List.append(os.path.join(prepath, files))
 
     return returned_List
+
+fetch_Files()
 
     
